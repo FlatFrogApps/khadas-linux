@@ -44,6 +44,7 @@ struct f_hidg {
 	unsigned short			report_desc_length;
 	char				*report_desc;
 	unsigned short			report_length;
+	unsigned short			max_contact_count;
 
 	/* recv report */
 	struct list_head		completed_out_req;
@@ -501,6 +502,7 @@ static int hidg_setup(struct usb_function *f,
 	struct usb_request		*req  = cdev->req;
 	int status = 0;
 	__u16 value, length;
+        __u8 rid;
 
 	value	= __le16_to_cpu(ctrl->wValue);
 	length	= __le16_to_cpu(ctrl->wLength);
@@ -514,9 +516,18 @@ static int hidg_setup(struct usb_function *f,
 		  | HID_REQ_GET_REPORT):
 		VDBG(cdev, "get_report\n");
 
-		/* send an empty report */
-		length = min_t(unsigned, length, hidg->report_length);
-		memset(req->buf, 0x0, length);
+               rid = (value & 0xFF);
+               printk("rid %d len %d\n", rid, length);
+               if (rid == 0x06 && (length == 2 || length == 257)) {
+                       /* windows asks with length 257, linux with length 2 */
+                       ((__u8 *)req->buf)[0] = rid;
+                       ((__u8 *)req->buf)[1] = hidg->max_contact_count;
+                       length = 2;
+               } else {
+                       /* send an empty report */
+                       length = min_t(unsigned, length, hidg->report_length);
+                       memset(req->buf, 0x0, length);
+               }
 
 		goto respond;
 		break;
@@ -923,6 +934,7 @@ CONFIGFS_ATTR(f_hid_opts_, name)
 
 F_HID_OPT(subclass, 8, 255);
 F_HID_OPT(protocol, 8, 255);
+F_HID_OPT(max_contact_count, 8, 255);
 F_HID_OPT(report_length, 16, 65535);
 
 static ssize_t f_hid_opts_report_desc_show(struct config_item *item, char *page)
@@ -980,6 +992,7 @@ static ssize_t f_hid_opts_dev_show(struct config_item *item, char *page)
 CONFIGFS_ATTR_RO(f_hid_opts_, dev);
 
 static struct configfs_attribute *hid_attrs[] = {
+	&f_hid_opts_attr_max_contact_count,
 	&f_hid_opts_attr_subclass,
 	&f_hid_opts_attr_protocol,
 	&f_hid_opts_attr_report_length,
@@ -1101,6 +1114,7 @@ static struct usb_function *hidg_alloc(struct usb_function_instance *fi)
 	hidg->bInterfaceSubClass = opts->subclass;
 	hidg->bInterfaceProtocol = opts->protocol;
 	hidg->report_length = opts->report_length;
+	hidg->max_contact_count = opts->max_contact_count;
 	hidg->report_desc_length = opts->report_desc_length;
 	if (opts->report_desc) {
 		hidg->report_desc = kmemdup(opts->report_desc,

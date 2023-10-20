@@ -21,6 +21,7 @@ struct f_hid_opts {
 	unsigned char			subclass;
 	unsigned char			protocol;
 	unsigned short			report_length;
+	unsigned short			max_contact_count;
 	unsigned short			report_desc_length;
 	unsigned char			*report_desc;
 	bool				report_desc_alloc;
