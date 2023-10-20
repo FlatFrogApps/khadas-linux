@@ -375,7 +375,7 @@
 				1   /*vbyone_intr_enable*/
 				3>; /*vbyone_vsync_intr_enable*/
 			phy_attr=<0x7 1>; /* vswing_level, preem_level */
-			hw_filter=<0 0>;  /* filter_time, filter_cnt*/
+			hw_filter=<1 1>;  /* filter_time, filter_cnt*/
 
 			/* power step: type, index, value, delay(ms) */
 			power_on_step = <
