@@ -516,18 +516,28 @@ static int hidg_setup(struct usb_function *f,
 		  | HID_REQ_GET_REPORT):
 		VDBG(cdev, "get_report\n");
 
-               rid = (value & 0xFF);
-               printk("rid %d len %d\n", rid, length);
-               if (rid == 0x06 && (length == 2 || length == 257)) {
-                       /* windows asks with length 257, linux with length 2 */
-                       ((__u8 *)req->buf)[0] = rid;
-                       ((__u8 *)req->buf)[1] = hidg->max_contact_count;
-                       length = 2;
-               } else {
-                       /* send an empty report */
-                       length = min_t(unsigned, length, hidg->report_length);
-                       memset(req->buf, 0x0, length);
-               }
+		rid = (value & 0xFF);
+		//printk(KERN_INFO "rid %d len %d\n", rid, length);
+		if (rid == 0x06 && (length == 2 || length == 257)) {
+			/* windows asks with length 257, linux with length 2 */
+			((__u8 *)req->buf)[0] = rid;
+			((__u8 *)req->buf)[1] = hidg->max_contact_count;
+			length = 2;
+		} else if (rid == 0x03) {
+			length = min_t(unsigned short, length, hidg->report_length);
+			memset(req->buf, 0x0, length);
+			((__u8 *)req->buf)[0] = rid;
+			((__u8 *)req->buf)[1] = 0x02;
+			((__u8 *)req->buf)[2] = 0;
+		} else if (rid == 0x05 || (rid >= 0x08 && rid <= 0x0D) || rid == 0xFF) {
+			length = min_t(unsigned short, length, hidg->report_length);
+			memset(req->buf, 0x0, length);
+			((__u8 *)req->buf)[0] = rid;
+		} else {
+			/* send an empty report */
+			length = min_t(unsigned short, length, hidg->report_length);
+			memset(req->buf, 0x0, length);
+		}
 
 		goto respond;
 		break;
@@ -543,7 +553,17 @@ static int hidg_setup(struct usb_function *f,
 	case ((USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE) << 8
 		  | HID_REQ_SET_REPORT):
 		VDBG(cdev, "set_report | wLength=%d\n", ctrl->wLength);
-		goto stall;
+
+		rid = (value & 0xFF);
+		//printk(KERN_INFO "rid %d len %d\n", rid, length);
+		if (rid == 0x03) {
+			//rid = ((__u8 *)req->buf)[0];
+			//__u8 mode = ((__u8 *)req->buf)[1];
+			//__u8 identifier = ((__u8 *)req->buf)[2];
+			goto respond;
+		} else {
+			goto stall;
+		}
 		break;
 
 	case ((USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE) << 8
