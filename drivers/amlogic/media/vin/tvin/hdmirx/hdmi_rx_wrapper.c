@@ -184,7 +184,7 @@ static bool term_flag = 1;
 /* vpp mute when signal change, used
  * in companion with vlock phase = 84
  */
-u32 vpp_mute_enable = 1;
+u32 vpp_mute_enable;
 int clk_chg_cnt;
 int clk_chg_max = 3;
 
