@@ -4230,13 +4230,13 @@ static inline bool dv_vf_crc_check(struct vframe_s *vf)
 	}
 
 	/*mute when err crc > = 6*/
-	if (vdin_err_crc_cnt >= ERR_CRC_COUNT) {
-		set_video_mute(true);
-		dv_mute_vpp_flag = true;
-	} else if (dv_mute_vpp_flag) {
-		set_video_mute(false);
-		dv_mute_vpp_flag = false;
-	}
+	//if (vdin_err_crc_cnt >= ERR_CRC_COUNT) {
+	//	set_video_mute(true);
+	//	dv_mute_vpp_flag = true;
+	//} else if (dv_mute_vpp_flag) {
+	//	set_video_mute(false);
+	//	dv_mute_vpp_flag = false;
+	//}
 	return crc_err;
 }
 
