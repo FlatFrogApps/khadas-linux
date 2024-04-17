@@ -918,6 +918,33 @@
 		states = <3300000 0>,
 				 <1800000 1>;
 	};
+
+	status_leds {
+		compatible = "gpio-leds";
+		blink_led {
+			gpios = <&gpio GPIOT_18 GPIO_ACTIVE_HIGH>;
+			// Including color or function will change the
+			// naming scheme to color:function[-sequence number]
+			// which is less descriptive than the device tree
+			// node name.
+			//color = <LED_COLOR_ID_GREEN>;
+			//function = LED_FUNCTION_INDICATOR;
+			retain-state-suspended;
+			default-state = "keep";
+		};
+
+		solid_led {
+			gpios = <&gpio GPIOT_19 GPIO_ACTIVE_HIGH>;
+			// Including color or function will change the
+			// naming scheme to color:function[-sequence number]
+			// which is less descriptive than the device tree
+			// node name.
+			//color = <LED_COLOR_ID_GREEN>;
+			//function = LED_FUNCTION_INDICATOR;
+			retain-state-suspended;
+			default-state = "keep";
+		};
+	};
 };
 
 &i2c_AO_A {
