@@ -98,6 +98,24 @@ struct vt_display_vsync {
 	u32 period;
 };
 
+/*
+ * struct vt_copy_buffer_data
+ * screen capture info
+ * @buf:        destination buffer for the captured image (in)
+ * @buf_size:   size of destination buffer and size of image (in/out)
+ * @width:      width of image copied to destination buffer (out)
+ * @height:     height of image copied to destination buffer (out)
+ * @stride:     line stride of copied image (out)
+ */
+struct vt_copy_buffer_data {
+	int tunnel_id;
+	u8 *buf;
+	u32 buf_size;
+	u32 width;
+	u32 height;
+	u32 stride;
+};
+
 #define VT_IOC_MAGIC 'V'
 
 /**
@@ -170,4 +188,11 @@ struct vt_display_vsync {
  */
 #define VT_IOC_SET_VSYNCTIME	_IOWR(VT_IOC_MAGIC, 8, \
 				      struct vt_display_vsync)
+
+/**
+ * VT_IOC_COPY_BUFFER - request an image capture from the
+ * videotunnel stream.
+ */
+#define VT_IOC_COPY_BUFFER	_IOWR(VT_IOC_MAGIC, 9, \
+				      struct vt_copy_buffer_data)
 #endif

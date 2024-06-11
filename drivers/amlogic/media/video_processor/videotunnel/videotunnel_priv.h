@@ -58,6 +58,7 @@ union vt_ioctl_arg {
 	struct vt_ctrl_data ctrl_data;
 	struct vt_buffer_data buffer_data;
 	struct vt_display_vsync vsync_data;
+	struct vt_copy_buffer_data copy_data;
 };
 
 /*
@@ -187,6 +188,32 @@ struct vt_cmd {
 };
 
 /*
+ * struct vt_screencap_params - frame capture parameters
+ * @frame_w:            frame width in pixels
+ * @frame_h:            frame height in pixels
+ * @stride:             image line stride in bytes
+ * @frame_size:         frame size in bytes
+ * @phy_addr:           destination dma buffer address
+ * @buf_size:           destination dma buffer size (page aligned)
+ * ge2d_context_s:      ge2d context
+ * @canvas0_addr:       ge2d cavas0 address
+ * active:              true if frame copy is active
+ * copy_mutex:
+ */
+struct vt_screencap_params {
+	int frame_w;
+	int frame_h;
+	u32 stride;
+	u32 frame_size;
+	u32 phy_addr;
+	u32 buf_size;
+	struct ge2d_context_s *ctxt;
+	u32 canvas0_addr;
+	int active;
+	struct mutex copy_mutex; /* protect screencap_params */
+};
+
+/*
  * struct vt_instance - an instance that holds the buffer
  * @ref:		reference count
  * @id:			unique id allocated by device->idr
@@ -231,6 +258,8 @@ struct vt_instance {
 
 	struct vt_buffer vt_buffers[VT_POOL_SIZE];
 	struct vt_state state;
+
+	struct vt_screencap_params screencap_params;
 };
 
 #endif /* __VIDEO_TUNNEL_PRIV_H */

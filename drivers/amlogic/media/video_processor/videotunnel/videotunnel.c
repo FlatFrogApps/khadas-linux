@@ -38,6 +38,17 @@
 #include <linux/amlogic/aml_sync_api.h>
 #include <linux/sched/task.h>
 
+#include <linux/amlogic/media/registers/cpu_version.h>
+#include <linux/amlogic/meson_uvm_core.h>
+#include <linux/amlogic/media/video_sink/v4lvideo_ext.h>
+#include <linux/amlogic/media/codec_mm/codec_mm.h>
+#include <linux/amlogic/media/ge2d/ge2d.h>
+#include <linux/amlogic/media/ge2d/ge2d_func.h>
+#include <linux/amlogic/media/vfm/vframe.h>
+#include <linux/amlogic/media/canvas/canvas.h>
+#include <linux/amlogic/media/canvas/canvas_mgr.h>
+#include <dev_ion.h>
+
 #include <asm-generic/bug.h>
 
 #include "videotunnel_priv.h"
@@ -58,6 +69,7 @@ enum {
 	VT_DEBUG_CMD              = 1U << 2,
 	VT_DEBUG_FILE             = 1U << 3,
 	VT_DEBUG_VSYNC            = 1U << 4,
+	VT_DEBUG_FF               = 1U << 5,
 };
 
 static u32 vt_debug_mask = VT_DEBUG_USER;
@@ -115,6 +127,367 @@ static const char *vt_debug_mode_status_to_string(int status)
 	}
 
 	return status_str;
+}
+
+static const char *keep_owner = "videotunnel";
+static int get_source_format(struct vframe_s *src)
+{
+	int format;
+
+	if ((src->bitdepth & BITDEPTH_Y10) &&
+			(!(src->type & VIDTYPE_COMPRESS)) &&
+			(get_cpu_type() >= MESON_CPU_MAJOR_ID_TXL)) {
+		if (src->type & VIDTYPE_VIU_422) {
+			if (src->bitdepth & FULL_PACK_422_MODE)
+				format = GE2D_FORMAT_S16_10BIT_YUV422;
+			else
+				format = GE2D_FORMAT_S16_12BIT_YUV422;
+		} else if (src->type & VIDTYPE_VIU_444) {
+			format = GE2D_FORMAT_S24_10BIT_YUV444;
+		} else if (src->type & VIDTYPE_RGB_444) {
+			format = GE2D_FORMAT_S24_10BIT_RGB888;
+			if (!(src->flag & VFRAME_FLAG_VIDEO_LINEAR))
+				format |= GE2D_LITTLE_ENDIAN;
+		}
+	} else {
+		if (src->type & VIDTYPE_VIU_422) {
+			format = GE2D_FORMAT_S16_YUV422;
+		} else if (src->type & VIDTYPE_VIU_NV21) {
+			format = GE2D_FORMAT_M24_NV21;
+		} else if (src->type & VIDTYPE_VIU_NV12) {
+			format = GE2D_FORMAT_M24_NV12;
+		} else if (src->type & VIDTYPE_VIU_444) {
+			format = GE2D_FORMAT_S24_YUV444;
+		} else if (src->type & VIDTYPE_RGB_444) {
+			format = GE2D_FORMAT_S24_RGB;
+			if (!(src->flag & VFRAME_FLAG_VIDEO_LINEAR))
+				format &= (~GE2D_LITTLE_ENDIAN);
+		} else {
+			format = GE2D_FORMAT_M24_YUV420;
+		}
+	}
+	vt_debug(VT_DEBUG_FF, "%s src bitdepth: %d, src type: %d, src flg: %d format: %d\n",
+			__func__, src->bitdepth, src->type, src->flag, format);
+	return format;
+}
+
+static int vt_ge2d_copy(struct vframe_s *src, struct vt_screencap_params *params)
+{
+	int ret = 0;
+	struct canvas_config_s dst_canvas0_config[1];
+	struct config_para_ex_s ge2d_config;
+	int src_canvas_id;
+	int input_x, input_y, input_width, input_height;
+	int position_left, position_top;
+	int position_width, position_height;
+	int canvas_alloced = 0;
+
+	params->frame_w = 0;
+	params->frame_h = 0;
+	params->stride = 0;
+	if (src->source_type != VFRAME_SOURCE_TYPE_HDMI) {
+		pr_err("not HDMI source");
+		return -1;
+	}
+	memset(&ge2d_config, 0, sizeof(struct config_para_ex_s));
+	memset(dst_canvas0_config, 0, sizeof(dst_canvas0_config));
+
+	// canvas config
+	if (src->canvas0Addr == (u32)-1) {
+		src_canvas_id = canvas_pool_map_alloc_canvas(keep_owner);
+		if (src_canvas_id < 0) {
+			pr_err("canvas_pool_map_alloc failed");
+			return -1;
+		}
+		canvas_config_config(src_canvas_id, &src->canvas0_config[0]);
+		canvas_alloced = 1;
+	} else {
+		src_canvas_id = src->canvas0Addr;
+	}
+
+	dst_canvas0_config[0].phy_addr = params->phy_addr;
+	dst_canvas0_config[0].width = src->width * 4;
+	dst_canvas0_config[0].height = src->height;
+	dst_canvas0_config[0].block_mode = 0;
+	dst_canvas0_config[0].endian = 0;
+	canvas_config_config(params->canvas0_addr, &dst_canvas0_config[0]);
+
+	//ge2d src config got this from vframe_ge2d_composer
+	ge2d_config.alu_const_color = 0;
+	ge2d_config.bitmask_en = 0;
+	ge2d_config.src1_gb_alpha = 0;
+	ge2d_config.src_key.key_enable = 0;
+	ge2d_config.src_key.key_mask = 0;
+	ge2d_config.src_key.key_mode = 0;
+	ge2d_config.src_para.mem_type = CANVAS_TYPE_INVALID;
+	ge2d_config.src_para.format = get_source_format(src);
+	ge2d_config.src_para.fill_color_en = 0;
+	ge2d_config.src_para.fill_mode = 0;
+	ge2d_config.src_para.x_rev = 0;
+	ge2d_config.src_para.y_rev = 0;
+	ge2d_config.src_para.color = 0xffffffff;
+	ge2d_config.src_para.top = 0;
+	ge2d_config.src_para.left = 0;
+	ge2d_config.src_para.width = src->width;
+	ge2d_config.src_para.height = src->height;
+	ge2d_config.src_para.canvas_index = src_canvas_id;
+	ge2d_config.src2_para.mem_type = CANVAS_TYPE_INVALID;
+
+	//ge2d dst config
+	ge2d_config.dst_xy_swap = 0;
+	ge2d_config.dst_para.mem_type = CANVAS_TYPE_INVALID;
+	ge2d_config.dst_para.fill_color_en = 0;
+	ge2d_config.dst_para.fill_mode = 0;
+	ge2d_config.dst_para.x_rev = 0;
+	ge2d_config.dst_para.y_rev = 0;
+	ge2d_config.dst_xy_swap = 0;
+	ge2d_config.dst_para.canvas_index = params->canvas0_addr;
+	ge2d_config.dst_para.color = 0;
+	ge2d_config.dst_para.top = 0;
+	ge2d_config.dst_para.left = 0;
+	ge2d_config.dst_para.format = GE2D_FORMAT_S32_ARGB;
+	ge2d_config.dst_para.width = src->width;
+	ge2d_config.dst_para.height = src->height;
+
+	ret = ge2d_context_config_ex(params->ctxt, &ge2d_config);
+	if (ret < 0) {
+		pr_err("vt ge2d_copy config error.\n");
+		goto ge2d_copy_out;
+	}
+
+	input_x = 0;
+	input_y = 0;
+	input_width = src->width;
+	input_height = src->height;
+	position_top = 0;
+	position_left = 0;
+	position_width = src->width;
+	position_height = src->height;
+	stretchblt_noalpha(params->ctxt,
+			input_x,
+			input_y,
+			input_width,
+			input_height,
+			position_left,
+			position_top,
+			position_width,
+			position_height);
+
+	params->frame_w = src->width;
+	params->frame_h = src->height;
+	params->stride = src->width * 4;
+ge2d_copy_out:
+	if (canvas_alloced)
+		canvas_pool_map_free_canvas(src_canvas_id);
+	return ret;
+}
+
+static void vt_frame_capture_teardown(struct vt_screencap_params *params)
+{
+	vt_debug(VT_DEBUG_FF, "vt frame_catpure_teardown");
+	mutex_lock(&params->copy_mutex);
+	if (params->phy_addr != 0) {
+		codec_mm_free_for_dma(keep_owner, params->phy_addr);
+		params->phy_addr = 0;
+	}
+	if (params->canvas0_addr >= 0) {
+		canvas_pool_map_free_canvas(params->canvas0_addr);
+		params->canvas0_addr = -1;
+	}
+	if (params->ctxt) {
+		destroy_ge2d_work_queue(params->ctxt);
+		params->ctxt = NULL;
+	}
+	params->active = 0;
+	mutex_unlock(&params->copy_mutex);
+}
+
+static int vt_frame_capture_setup(struct vt_screencap_params *params)
+{
+	vt_debug(VT_DEBUG_FF, "vt frame_catpure_setup");
+	mutex_init(&params->copy_mutex);
+	if (params->active) {
+		vt_debug(VT_DEBUG_FF, "vt frame capture already set up");
+		return 0;
+	}
+
+	params->phy_addr = 0;
+	params->buf_size = 0;
+	params->canvas0_addr = canvas_pool_map_alloc_canvas(keep_owner);
+	if (params->canvas0_addr < 0) {
+		pr_err("vt canvas alloc failed");
+		goto capture_setup_err;
+	}
+
+	params->ctxt = create_ge2d_work_queue();
+	if (!params->ctxt) {
+		pr_err("vt ge2d create failed\n");
+		goto capture_setup_err;
+	}
+	params->active = 1;
+	params->frame_w = 0;
+	params->frame_h = 0;
+	params->stride = 0;
+	return 0;
+
+capture_setup_err:
+	if (params->canvas0_addr >= 0) {
+		canvas_pool_map_free_canvas(params->canvas0_addr);
+		params->canvas0_addr = -1;
+	}
+	if (params->ctxt) {
+		destroy_ge2d_work_queue(params->ctxt);
+		params->ctxt = NULL;
+	}
+	return -1;
+}
+
+static int vt_frame_capture(struct vt_screencap_params *params, struct vt_buffer *buffer)
+{
+	struct file_private_data *file_private_data = NULL;
+	struct vframe_s *vf = NULL;
+	u32 frame_size;
+
+	if (!params->active) {
+		vt_debug(VT_DEBUG_FF, "vt frame_capture disabled");
+		return 0;
+	}
+
+	if (!buffer->file_buffer) {
+		pr_err("vt frame_capture invalid buffer file");
+		return -1;
+	}
+
+	if (!is_valid_mod_type(buffer->file_buffer->private_data, VF_PROCESS_V4LVIDEO)) {
+		pr_err("vt frame_capture not v4l data");
+		return -1;
+	}
+
+	if (is_v4lvideo_buf_file(buffer->file_buffer)) {
+		file_private_data = (struct file_private_data *)(buffer->file_buffer->private_data);
+	} else {
+		struct uvm_hook_mod *uhmod;
+
+		uhmod = uvm_get_hook_mod((struct dma_buf *)(buffer->file_buffer->private_data),
+				VF_PROCESS_V4LVIDEO);
+		if (!uhmod) {
+			vt_debug(VT_DEBUG_FF, "vt frame_capture uhmod is NULL");
+		} else {
+			file_private_data = uhmod->arg;
+			uvm_put_hook_mod((struct dma_buf *)(buffer->file_buffer->private_data),
+					VF_PROCESS_V4LVIDEO);
+		}
+	}
+
+	if (!file_private_data) {
+		pr_err("vt frame_capture file_private_data is NULL");
+		return -1;
+	}
+
+	vf = &file_private_data->vf;
+	vt_debug(VT_DEBUG_FF, "vt frame_capture vframe_s: flag: %d, width: %d (%d, %d), height: %d (%d), canvas: %dx%d, type %d, planes %d, flag %d",
+			vf->flag,
+			vf->width,
+			vf->compWidth,
+			vf->bufWidth,
+			vf->height,
+			vf->compHeight,
+			vf->canvas0_config[0].width,
+			vf->canvas0_config[0].height,
+			vf->type,
+			vf->plane_num,
+			vf->flag);
+
+	mutex_lock(&params->copy_mutex);
+	frame_size = vf->width * vf->height * 4; //ARGB = 4
+	params->frame_size = frame_size;
+	/* check if we need to resize our buffer */
+	if (params->phy_addr == 0 || params->frame_size < frame_size) {
+		int flags;
+		u32 buf_size;
+
+		flags = CODEC_MM_FLAGS_DMA_CPU | CODEC_MM_FLAGS_CMA_CLEAR;
+		if (params->phy_addr > 0) {
+			codec_mm_free_for_dma(keep_owner, params->phy_addr);
+			params->phy_addr = 0;
+			params->buf_size = 0;
+		}
+		buf_size = PAGE_ALIGN(frame_size);
+		params->phy_addr = codec_mm_alloc_for_dma(keep_owner,
+				buf_size / PAGE_SIZE,
+				0,
+				flags);
+		if (params->phy_addr == 0) {
+			pr_err("vt buffer alloc failed");
+			mutex_unlock(&params->copy_mutex);
+			return -1;
+		}
+		params->buf_size = buf_size;
+		vt_debug(VT_DEBUG_FF, "vt alloc new cap buf %u fs: %u",
+				params->buf_size,
+				params->frame_size);
+	}
+
+	if (vt_ge2d_copy(vf, params) != 0) {
+		vt_debug(VT_DEBUG_FF, "vt_ge2d_copy failed");
+		mutex_unlock(&params->copy_mutex);
+		return -1;
+	}
+	mutex_unlock(&params->copy_mutex);
+	return 0;
+}
+
+static struct vt_buffer *vt_buffer_get_locked(struct vt_instance *instance, int key);
+static int vt_copy_buffer_process(struct vt_copy_buffer_data *data, struct vt_session *session)
+{
+	int ret = 0;
+	u8 *mem_src = NULL;
+	struct vt_dev *dev = session->dev;
+	struct vt_instance *instance = idr_find(&dev->instance_idr, data->tunnel_id);
+	struct vt_screencap_params *params = &instance->screencap_params;
+
+	mutex_lock(&params->copy_mutex);
+	if (!params->active) {
+		pr_err("vt copy screencap inactive\n");
+		ret = -ECANCELED;
+	} else if (params->frame_w <= 0 || params->frame_h <= 0) {
+		pr_err("vt copy no valid capture\n");
+		ret = -EAGAIN;
+	} else if (params->phy_addr <= 0) {
+		pr_err("vt copy invalid capture buffer\n");
+		ret = -EAGAIN;
+	} else if (!data->buf || (data->buf_size < params->frame_size)) {
+		pr_err("vt copy invalid destination buffer\n");
+		ret = -EINVAL;
+	} else {
+		vt_debug(VT_DEBUG_FF, "vt copy do vmap: %u, %u\n",
+				params->phy_addr,
+				params->frame_size);
+		mem_src = codec_mm_vmap(params->phy_addr, params->frame_size);
+		if (!mem_src) {
+			pr_err("vt vmap failed\n");
+			ret = -EAGAIN;
+		} else {
+			unsigned long cnt;
+
+			vt_debug(VT_DEBUG_FF, "vt do memcpy here dst size: %u, src size: %u\n",
+					data->buf_size, params->frame_size);
+			cnt = copy_to_user(data->buf, mem_src, params->frame_size);
+			vt_debug(VT_DEBUG_FF, "vt do vunmap");
+			codec_mm_unmap_phyaddr(mem_src);
+			if (cnt != 0)
+				pr_err("memcpy failed to copy %ul bytes\n", cnt);
+
+			// set user data
+			data->buf_size = params->frame_size - cnt;
+			data->width = params->frame_w;
+			data->height = params->frame_h;
+			data->stride = params->stride;
+		}
+	}
+	mutex_unlock(&params->copy_mutex);
+	vt_debug(VT_DEBUG_FF, "vt copy done return %d\n", ret);
+	return ret;
 }
 
 static int vt_debug_instance_show(struct seq_file *s, void *unused)
@@ -388,6 +761,9 @@ static void vt_instance_destroy(struct kref *kref)
 		}
 	}
 	kfifo_free(&instance->fifo_to_producer);
+
+	/* destroy frame capture */
+	vt_frame_capture_teardown(&instance->screencap_params);
 	mutex_unlock(&instance->lock);
 
 	/* destroy fifo cmd */
@@ -466,6 +842,10 @@ static struct vt_instance *vt_instance_create_lock(struct vt_dev *dev)
 	/* set the buffer pool status to free */
 	for (i = 0; i < VT_POOL_SIZE; i++)
 		instance->vt_buffers[i].item.buffer_status = VT_BUFFER_FREE;
+
+	/* setup frame capture */
+	if (vt_frame_capture_setup(&instance->screencap_params) != 0)
+		pr_err("vt frame capture setup failed");
 
 	/* insert it to dev instances rb tree */
 	p = &dev->instances.rb_node;
@@ -1725,6 +2105,10 @@ static int vt_release_buffer_process(struct vt_buffer_data *data,
 		return 0;
 	}
 
+	/* save frame data before release to make screen capture available */
+	if (instance->screencap_params.active)
+		vt_frame_capture(&instance->screencap_params, buffer);
+
 	buffer->file_fence = NULL;
 	if (data->fence_fd >= 0) {
 		buffer->file_fence = fget(data->fence_fd);
@@ -1809,6 +2193,7 @@ static unsigned int vt_ioctl_dir(unsigned int cmd)
 	case VT_IOC_ACQUIRE_BUFFER:
 	case VT_IOC_CTRL:
 	case VT_IOC_GET_VSYNCTIME:
+	case VT_IOC_COPY_BUFFER:
 		return _IOC_READ;
 	case VT_IOC_QUEUE_BUFFER:
 	case VT_IOC_RELEASE_BUFFER:
@@ -1865,6 +2250,9 @@ static long vt_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		break;
 	case VT_IOC_GET_VSYNCTIME:
 		ret = vt_get_vsync_info(&data.vsync_data, session);
+		break;
+	case VT_IOC_COPY_BUFFER:
+		ret = vt_copy_buffer_process(&data.copy_data, session);
 		break;
 	default:
 		return -ENOTTY;
