@@ -300,6 +300,7 @@ static void vt_frame_capture_teardown(struct vt_screencap_params *params)
 	}
 	params->active = 0;
 	mutex_unlock(&params->copy_mutex);
+	mutex_destroy(&params->copy_mutex);
 }
 
 static int vt_frame_capture_setup(struct vt_screencap_params *params)
@@ -444,10 +445,18 @@ static int vt_copy_buffer_process(struct vt_copy_buffer_data *data, struct vt_se
 	u8 *mem_src = NULL;
 	struct vt_dev *dev = session->dev;
 	struct vt_instance *instance = idr_find(&dev->instance_idr, data->tunnel_id);
+	if (!instance) {
+		pr_warn("vt copy stream down\n");
+		return -ECANCELED;
+	}
+	mutex_lock(&dev->instance_lock);
 	struct vt_screencap_params *params = &instance->screencap_params;
 
 	mutex_lock(&params->copy_mutex);
-	if (!params->active) {
+	if (!params) {
+		pr_err("vt copy invalid params\n");
+		ret = -ECANCELED;
+	} else if (!params->active) {
 		pr_err("vt copy screencap inactive\n");
 		ret = -ECANCELED;
 	} else if (params->frame_w <= 0 || params->frame_h <= 0) {
@@ -486,6 +495,7 @@ static int vt_copy_buffer_process(struct vt_copy_buffer_data *data, struct vt_se
 		}
 	}
 	mutex_unlock(&params->copy_mutex);
+	mutex_unlock(&dev->instance_lock);
 	vt_debug(VT_DEBUG_FF, "vt copy done return %d\n", ret);
 	return ret;
 }
