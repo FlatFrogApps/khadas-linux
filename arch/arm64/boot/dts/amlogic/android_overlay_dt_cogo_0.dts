@@ -1,0 +1,53 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (c) 2019 Amlogic, Inc. All rights reserved.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/gpio/meson-t7-gpio.h>
+#include <dt-bindings/leds/common.h>
+
+/ {
+//    compatible="kvim4,kvim4n";
+
+    // dtc will emit an error based on the fragment@0 syntax:
+    // Warning (unit_address_vs_reg): Node /fragment@0 has a unit name, but no reg property
+    //
+    // "Here, dtc is tricked by the fragment@<n> syntax into expecting
+    //  a corresponding "reg", but there shouldn't be one. This warning
+    //  is a fact of life until dtc is updated to include a better
+    //  understanding of the overlay syntax."
+    // https://forums.raspberrypi.com/viewtopic.php?t=172342
+    fragment@0 {
+        // either relative path
+        //target = <&some_node>;
+        // or absolute path
+        target-path="/";
+        __overlay__ {
+
+	    status_leds {
+	        compatible = "gpio-leds";
+	        blink_led {
+	            gpios = <&gpio GPIOT_18 GPIO_ACTIVE_HIGH>;
+	            // Including color or function will change the
+	            // naming scheme to color:function[-sequence number]
+	            // which is less descriptive than the device tree
+	            // node name.
+	            //color = <LED_COLOR_ID_GREEN>;
+	            //function = LED_FUNCTION_INDICATOR;
+	            retain-state-suspended;
+	            default-state = "keep";
+	        };
+
+	        solid_led {
+	            gpios = <&gpio GPIOT_19 GPIO_ACTIVE_HIGH>;
+	            retain-state-suspended;
+	            default-state = "keep";
+	        };
+	    };
+        };
+    };
+};

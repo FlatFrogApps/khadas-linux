@@ -1,0 +1,91 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (c) 2019 Amlogic, Inc. All rights reserved.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/gpio/meson-t7-gpio.h>
+#include <dt-bindings/leds/common.h>
+
+/*
+ * Helper to show loaded overlays under: /proc/device-tree/chosen/overlays/
+ */
+//&{/chosen} {
+//        overlays {
+//                android_overlay_dt_cogo_1.kernel = __TIMESTAMP__;
+//        };
+//};
+
+/ {
+//    compatible="kvim4,kvim4n";
+
+    // dtc will emit an error based on the fragment@0 syntax:
+    // Warning (unit_address_vs_reg): Node /fragment@0 has a unit name, but no reg property
+    //
+    // "Here, dtc is tricked by the fragment@<n> syntax into expecting
+    //  a corresponding "reg", but there shouldn't be one. This warning
+    //  is a fact of life until dtc is updated to include a better
+    //  understanding of the overlay syntax."
+    // https://forums.raspberrypi.com/viewtopic.php?t=172342
+    fragment@0 {
+        // absolute path
+        target-path="/";
+        __overlay__ {
+
+	    status_leds {
+	        compatible = "gpio-leds";
+	        green_led {
+	            gpios = <&gpio GPIOY_8 GPIO_ACTIVE_LOW>;
+	            // Including color or function will change the
+	            // naming scheme to color:function[-sequence number]
+	            // which is less descriptive than the device tree
+	            // node name.
+	            //color = <LED_COLOR_ID_GREEN>;
+	            //function = LED_FUNCTION_INDICATOR;
+	            retain-state-suspended;
+	            default-state = "keep";
+	        };
+
+                blue_led {
+	            gpios = <&gpio GPIOT_18 GPIO_ACTIVE_LOW>;
+	            retain-state-suspended;
+	            default-state = "keep";
+	        };
+
+	        red_led {
+	            gpios = <&gpio GPIOT_19 GPIO_ACTIVE_LOW>;
+	            retain-state-suspended;
+	            default-state = "keep";
+	        };
+	    };
+        };
+    };
+
+    fragment@1 {
+        // relative path
+        target = <&i2c5>;
+        __overlay__ {
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            at24c32d@50 {
+                // https://www.kernel.org/doc/Documentation/devicetree/bindings/eeprom/at24.yaml
+                compatible = "microchip,24c32", "atmel,24c32";
+                reg = <0x50>; // address
+                size = <4096>; //bytes
+                pagesize = <32>; //bytes
+                address-width = <16>; //bits
+
+                status = "okay";
+            };
+        };
+    };
+
+//    fragment@2 {
+// gpio for checking VIN_DET not really needed because it would always be high (if is was defined)
+//    };
+
+};
