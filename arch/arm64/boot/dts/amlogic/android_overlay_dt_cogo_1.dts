@@ -25,6 +25,8 @@
     // dtc will emit an error based on the fragment@0 syntax:
     // Warning (unit_address_vs_reg): Node /fragment@0 has a unit name, but no reg property
     //
+    // This warning can be suppressed with -Wno-unit_address_vs_reg
+    //
     // "Here, dtc is tricked by the fragment@<n> syntax into expecting
     //  a corresponding "reg", but there shouldn't be one. This warning
     //  is a fact of life until dtc is updated to include a better
