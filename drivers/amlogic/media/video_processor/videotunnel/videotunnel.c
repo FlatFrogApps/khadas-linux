@@ -245,7 +245,7 @@ static int vt_ge2d_copy(struct vframe_s *src, struct vt_screencap_params *params
 	ge2d_config.dst_para.color = 0;
 	ge2d_config.dst_para.top = 0;
 	ge2d_config.dst_para.left = 0;
-	ge2d_config.dst_para.format = GE2D_FORMAT_S32_ARGB;
+	ge2d_config.dst_para.format = GE2D_FORMAT_S32_ABGR;
 	ge2d_config.dst_para.width = src->width;
 	ge2d_config.dst_para.height = src->height;
 
