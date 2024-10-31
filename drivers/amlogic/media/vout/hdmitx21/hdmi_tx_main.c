@@ -1745,7 +1745,7 @@ static void hdmitx_set_vsif_pkt(enum eotf_type type,
 			else
 				hdmi_vend_infoframe_set(NULL);
 			if (signal_sdr) {
-				bool is_dvi = is_dvi_device(&hdev->rxcap);
+				bool is_dvi = hdev->rxcap.ieeeoui != HDMI_IEEE_OUI;
 				pr_info("hdmitx: H14b VSIF, switching signal to SDR, is_dvi = %b\n", is_dvi);
 				update_current_para(hdev);
 				hdmi_avi_infoframe_config(CONF_AVI_CS, hdev->para->cs);
