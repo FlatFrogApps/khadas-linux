@@ -69,7 +69,7 @@ static int fence_dq_count;
 static int fence_put_count;
 static int fence_null_count;
 static int low_latency_mode = 1;
-static int resync_open;
+static int resync_open = 1;
 
 int vq_print(int debug_flag, const char *fmt, ...)
 {
