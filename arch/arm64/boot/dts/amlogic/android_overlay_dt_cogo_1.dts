@@ -90,4 +90,10 @@
 // gpio for checking VIN_DET not really needed because it would always be high (if is was defined)
 //    };
 
+    fragment@2 {
+        target = <&codec_mm_cma>;
+        __overlay__ {
+            size = <0x0 0x3f800000>;
+        };
+    };
 };
