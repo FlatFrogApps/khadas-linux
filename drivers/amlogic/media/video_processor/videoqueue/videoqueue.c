@@ -513,7 +513,7 @@ static void do_file_thread(struct video_queue_dev *dev)
 				dev->frc_delay_first_frame, frc_delay);
 
 			if (frc_delay == dev->frc_delay_first_frame) {
-				vq_print(P_ERROR,
+				vq_print(P_SYNC,
 					"resync:need=%d,actual=%d,diff=%lld\n",
 					tvin_delay_duration, vframe_walk_delay,
 					avsync_diff);
