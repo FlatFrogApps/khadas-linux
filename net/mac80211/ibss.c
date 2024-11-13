@@ -1626,7 +1626,6 @@ void ieee80211_ibss_rx_queued_mgmt(struct ieee80211_sub_if_data *sdata,
 	rx_status = IEEE80211_SKB_RXCB(skb);
 	mgmt = (struct ieee80211_mgmt *) skb->data;
 	fc = le16_to_cpu(mgmt->frame_control);
-+   ibss_dbg(sdata, "ieee80211_ibss_rx_queued_mgmt: fc 0x%x\n", fc & IEEE80211_FCTL_STYPE);
 
 	sdata_lock(sdata);
 

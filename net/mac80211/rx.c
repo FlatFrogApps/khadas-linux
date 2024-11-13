@@ -3563,7 +3563,6 @@ ieee80211_rx_h_mgmt(struct ieee80211_rx_data *rx)
 	__le16 stype;
 
 	stype = mgmt->frame_control & cpu_to_le16(IEEE80211_FCTL_STYPE);
-	ibss_dbg(sdata, "ieee80211_rx_h_mgmt: stype 0x%x\n", stype);
 
 	if (!ieee80211_vif_is_mesh(&sdata->vif) &&
 	    sdata->vif.type != NL80211_IFTYPE_ADHOC &&
